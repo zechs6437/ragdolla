@@ -102,7 +102,7 @@
       <AdditionalOptions>..\..\lib\ScriptHookV.lib %(AdditionalOptions)</AdditionalOptions>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy "$(ProjectDir)Ragdolla.ini" "$(OutDir)"</Command>
+      <Command>xcopy "$(ProjectDir)Ragdolla.ini" "$(OutDir)" /c /Y</Command>
     </PostBuildEvent>
     <PostBuildEvent>
       <Message>Move INI file</Message>
