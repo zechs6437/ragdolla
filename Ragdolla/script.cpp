@@ -139,8 +139,8 @@ void niceFly()
 	Player player = PLAYER::PLAYER_ID();
 	Ped playerPed = PLAYER::PLAYER_PED_ID();
 	//Any player = PLAYER::GET_PLAYER_PED(playerPed);
-	//if (niceFlyToggle && CONTROLS::IS_CONTROL_PRESSED(0, 21))
-	//{
+	if (niceFlyToggle && CONTROLS::IS_CONTROL_PRESSED(0, 21))
+	{
 		GAMEPLAY::SET_SUPER_JUMP_THIS_FRAME(player);
 		if (!WEAPON::HAS_PED_GOT_WEAPON(playerPed, 4222310262, 0))
 		{
@@ -157,7 +157,7 @@ void niceFly()
 				ENTITY::APPLY_FORCE_TO_ENTITY(playerPed, 0, 0, 0, 10000, 0, 0, 0, 0, true, false, false, false, false);
 			}
 		}
-	//}
+	}
 }
 
 void update()
