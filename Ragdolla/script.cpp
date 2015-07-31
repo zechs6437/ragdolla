@@ -120,6 +120,7 @@ void carModder()
 			//VEHICLE::SET_VEHICLE_MOD_COLOR_2(veh, 3, 0);
 			VEHICLE::SET_VEHICLE_WHEEL_TYPE(veh, 6); //rims
 			VEHICLE::SET_VEHICLE_WINDOW_TINT(veh, 1);
+			set_status_text("Car Fully Upgraded");
 		}
 	}
 	
@@ -163,10 +164,7 @@ void niceFly()
 void update()
 {
 	update_status_text();
-	if (IsKeyJustUp(0x12)) {
-		carModder();
-		set_status_text("Car Fully Upgraded");
-	}
+	if (IsKeyJustUp(0x12)) carModder();
 	if (CONTROLS::IS_CONTROL_PRESSED(2, 75)) gtaivCarExit();
 	if (IsKeyDown(ragdollKeyCode)) ragDoller();
 
