@@ -3,14 +3,29 @@
 #include <string>
 #include <ctime>
 
-#pragma warning(disable : 4244 4305) // double <-> float conversions
+#pragma warning(disable : 4244 4305 4800) // double <-> float conversions (and some bool conversion bullshit that I don't care about)
 
-//BOOL toggleRagdoll = false;
-BOOL toggleRagdoll = GetPrivateProfileInt("Ragdoll", "toggleRagdoll", 0, "./Ragdolla.ini");
-int ragdollKeyCode = GetPrivateProfileInt("Ragdoll", "RagdollKeyCode", 0x55, "./Ragdolla.ini"); //0x55 = U
-int toggleKeyCode = GetPrivateProfileInt("Ragdoll", "ToggleKeyCode", 0x49, "./Ragdolla.ini"); //0x49 = I
-BOOL toggleAlwaysRadio = GetPrivateProfileInt("Radio", "AlwaysRadio", 1, "./Ragdolla.ini");
 BOOL niceFlyToggle = true;
+
+Hash silencerHashes[5] = { 0x65EA7EBB, 0x837445AA, 0xA73D4664, 0xC304849A, 0xE608B35E };
+Hash magazineHashes[22] = { 0x249A17D5, 0x64F9C62B, 0x7B0033B3, 0x7C8BD10E, 0x86BD7F72, 0x8EC1C979, 0xB3688B0F, 0xD6C59CD6, 0xED265A1C, 0xD67B4F2D, 0xD9D3AC92, 0x33BA12E8, 0x10E6BA2B, 0x350966FB,
+	0xBB46E417, 0x334A5203, 0x82158B47, 0xEAC8C270, 0xB1214F9B, 0x91109691, 0xCCFD2AC5, 0x971CF6FD };
+Hash gripHash = 0xC164F53;
+Hash flashlightHashes[2] = { 0x359B7AAE, 0x7BC4CDDC };
+Hash scopeHashes[7] = { 0x9D2FBF29, 0xA0D89C42, 0xAA2C45B4, 0xD2443DDC, 0x3CC6BA57, 0x3C00AFED, 0xBC54DA77 };
+
+bool featureNiceFly = GetPrivateProfileInt("Toggles", "NiceFly", 0, "./Ragdolla.ini");
+bool featureGTAIVCarExit = GetPrivateProfileInt("Toggles", "GTAIVCarExit", 0, "./Ragdolla.ini");
+bool featureRagdoll = GetPrivateProfileInt("Toggles", "Ragdoll", 0, "./Ragdolla.ini");
+bool featureAlwaysRadio = GetPrivateProfileInt("Toggles", "AlwaysRadio", 1, "./Ragdolla.ini");
+bool featureAlwaysRadioUpdated = false;
+bool featureCarUpgrade = GetPrivateProfileInt("Toggles", "CarUpgrade", 1, "./Ragdolla.ini");
+bool featureSilencerToggle = GetPrivateProfileInt("Toggles", "SilencerToggle", 1, "./Ragdolla.ini");
+bool featureWeaponSilencer = false;
+bool featureWeaponMagazine = false;
+bool featureWeaponGrip = false;
+bool featureWeaponFlashlight = false;
+bool featureWeaponScope = false;
 
 std::string statusText;
 DWORD statusTextDrawTicksMax;
@@ -47,10 +62,109 @@ void set_status_text(std::string str, DWORD time = 2500, bool isGxtEntry = false
 	statusTextGxtEntry = isGxtEntry;
 }
 
-void radioChecker()
+bool trainer_switch_pressed()
 {
-	toggleAlwaysRadio = false;
-	AUDIO::SET_MOBILE_RADIO_ENABLED_DURING_GAMEPLAY(true);
+	return IsKeyJustUp(VK_F5);
+}
+
+void get_button_state(bool *a, bool *b, bool *up, bool *down, bool *l, bool *r)
+{
+	if (a) *a = IsKeyDown(VK_NUMPAD5);
+	if (b) *b = IsKeyDown(VK_NUMPAD0) || trainer_switch_pressed() || IsKeyDown(VK_BACK);
+	if (up) *up = IsKeyDown(VK_NUMPAD8);
+	if (down) *down = IsKeyDown(VK_NUMPAD2);
+	if (r) *r = IsKeyDown(VK_NUMPAD6);
+	if (l) *l = IsKeyDown(VK_NUMPAD4);
+}
+
+void menu_beep()
+{
+	AUDIO::PLAY_SOUND_FRONTEND(-1, "NAV_UP_DOWN", "HUD_FRONTEND_DEFAULT_SOUNDSET", 0);
+}
+
+void draw_rect(float A_0, float A_1, float A_2, float A_3, int A_4, int A_5, int A_6, int A_7)
+{
+	GRAPHICS::DRAW_RECT((A_0 + (A_2 * 0.5f)), (A_1 + (A_3 * 0.5f)), A_2, A_3, A_4, A_5, A_6, A_7);
+}
+
+void draw_menu_line(std::string caption, float lineWidth, float lineHeight, float lineTop, float lineLeft, float textLeft, bool active, bool title, bool rescaleText = true)
+{
+	// default values
+	int text_col[4] = { 255, 255, 255, 255 },
+		rect_col[4] = { 70, 95, 95, 255 };
+	float text_scale = 0.35;
+	int font = 0;
+
+	// correcting values for active line
+	if (active)
+	{
+		text_col[0] = 0;
+		text_col[1] = 0;
+		text_col[2] = 0;
+
+		rect_col[0] = 218;
+		rect_col[1] = 242;
+		rect_col[2] = 216;
+
+		if (rescaleText) text_scale = 0.40;
+	}
+
+	if (title)
+	{
+		rect_col[0] = 0;
+		rect_col[1] = 0;
+		rect_col[2] = 0;
+
+		if (rescaleText) text_scale = 0.50;
+		font = 1;
+	}
+
+	int screen_w, screen_h;
+	GRAPHICS::GET_SCREEN_RESOLUTION(&screen_w, &screen_h);
+
+	textLeft += lineLeft;
+
+	float lineWidthScaled = lineWidth / (float)screen_w; // line width
+	float lineTopScaled = lineTop / (float)screen_h; // line top offset
+	float textLeftScaled = textLeft / (float)screen_w; // text left offset
+	float lineHeightScaled = lineHeight / (float)screen_h; // line height
+
+	float lineLeftScaled = lineLeft / (float)screen_w;
+
+	// this is how it's done in original scripts
+
+	// text upper part
+	UI::SET_TEXT_FONT(font);
+	UI::SET_TEXT_SCALE(0.0, text_scale);
+	UI::SET_TEXT_COLOUR(text_col[0], text_col[1], text_col[2], text_col[3]);
+	UI::SET_TEXT_CENTRE(0);
+	UI::SET_TEXT_DROPSHADOW(0, 0, 0, 0, 0);
+	UI::SET_TEXT_EDGE(0, 0, 0, 0, 0);
+	UI::_SET_TEXT_ENTRY("STRING");
+	UI::_ADD_TEXT_COMPONENT_STRING((LPSTR)caption.c_str());
+	UI::_DRAW_TEXT(textLeftScaled, (((lineTopScaled + 0.00278f) + lineHeightScaled) - 0.005f));
+
+	// text lower part
+	UI::SET_TEXT_FONT(font);
+	UI::SET_TEXT_SCALE(0.0, text_scale);
+	UI::SET_TEXT_COLOUR(text_col[0], text_col[1], text_col[2], text_col[3]);
+	UI::SET_TEXT_CENTRE(0);
+	UI::SET_TEXT_DROPSHADOW(0, 0, 0, 0, 0);
+	UI::SET_TEXT_EDGE(0, 0, 0, 0, 0);
+	UI::_SET_TEXT_GXT_ENTRY("STRING");
+	UI::_ADD_TEXT_COMPONENT_STRING((LPSTR)caption.c_str());
+	int num25 = UI::_0x9040DFB09BE75706(textLeftScaled, (((lineTopScaled + 0.00278f) + lineHeightScaled) - 0.005f));
+
+	// rect
+	draw_rect(lineLeftScaled, lineTopScaled + (0.00278f),
+		lineWidthScaled, ((((float)(num25)* UI::_0xDB88A37483346780(text_scale, 0)) + (lineHeightScaled * 2.0f)) + 0.005f),
+		rect_col[0], rect_col[1], rect_col[2], rect_col[3]);
+}
+
+std::string line_as_str(std::string text, bool *pState)
+{
+	while (text.size() < 18) text += " ";
+	return text + (pState ? (*pState ? " [ON]" : " [OFF]") : "");
 }
 
 void gtaivCarExit()
@@ -60,7 +174,7 @@ void gtaivCarExit()
 	Any playerVehicle = PED::GET_VEHICLE_PED_IS_USING(playerPed);
 	//float playerVehicleSpeed = ENTITY::GET_ENTITY_SPEED(playerVehicle);
 	Any isPlayerDriving = (VEHICLE::GET_PED_IN_VEHICLE_SEAT(playerVehicle, -1) == playerPed);
-	
+
 	if (isPlayerDriving)
 	{
 		for (int i = 0; i < 10; i++)
@@ -123,10 +237,10 @@ void carModder()
 			set_status_text("Car Fully Upgraded");
 		}
 	}
-	
+
 }
 
-void ragDoller()
+void ragdoller()
 {
 	Ped playerPed = PLAYER::PLAYER_PED_ID();
 	BOOL playerExists = ENTITY::DOES_ENTITY_EXIST(playerPed);
@@ -140,7 +254,7 @@ void niceFly()
 	Player player = PLAYER::PLAYER_ID();
 	Ped playerPed = PLAYER::PLAYER_PED_ID();
 	//Any player = PLAYER::GET_PLAYER_PED(playerPed);
-	if (niceFlyToggle && CONTROLS::IS_CONTROL_PRESSED(0, 21))
+	if (CONTROLS::IS_CONTROL_PRESSED(0, 21))
 	{
 		GAMEPLAY::SET_SUPER_JUMP_THIS_FRAME(player);
 		if (!WEAPON::HAS_PED_GOT_WEAPON(playerPed, 4222310262, 0))
@@ -161,72 +275,6 @@ void niceFly()
 	}
 }
 
-void weaponModder()
-{
-	Player player = PLAYER::PLAYER_ID();
-	Ped playerPed = PLAYER::PLAYER_PED_ID();
-
-	Hash silencerHashes[5] = { 0x65EA7EBB, 0x837445AA, 0xA73D4664, 0xC304849A, 0xE608B35E };
-	Hash magazineHashes[22] = { 0x249A17D5, 0x64F9C62B, 0x7B0033B3, 0x7C8BD10E, 0x86BD7F72, 0x8EC1C979, 0xB3688B0F, 0xD6C59CD6, 0xED265A1C, 0xD67B4F2D, 0xD9D3AC92, 0x33BA12E8, 0x10E6BA2B, 0x350966FB,
-		0xBB46E417, 0x334A5203, 0x82158B47, 0xEAC8C270, 0xB1214F9B, 0x91109691, 0xCCFD2AC5, 0x971CF6FD };
-	Hash gripHash = 0xC164F53;
-	Hash flashlightHashes[2] = { 0x359B7AAE, 0x7BC4CDDC };
-	Hash scopeHashes[7] = { 0x9D2FBF29, 0xA0D89C42, 0xAA2C45B4, 0xD2443DDC, 0x3CC6BA57, 0x3C00AFED, 0xBC54DA77 };
-
-	Hash playerWeapon = WEAPON::GET_SELECTED_PED_WEAPON(playerPed);
-
-	for (int a = 0; a < 5; a = a + 1)
-	{
-		if (WEAPON::_CAN_WEAPON_HAVE_COMPONENT(playerWeapon, silencerHashes[a]))
-		{
-			if (WEAPON::HAS_PED_GOT_WEAPON_COMPONENT(playerPed, playerWeapon, silencerHashes[a]))
-			{
-				WEAPON::REMOVE_WEAPON_COMPONENT_FROM_PED(playerPed, playerWeapon, silencerHashes[a]);
-				set_status_text("Silencer Removed");
-			}
-			else
-			{
-				WEAPON::GIVE_WEAPON_COMPONENT_TO_PED(playerPed, playerWeapon, silencerHashes[a]);
-				set_status_text("Silencer Attached");
-			}
-		}
-	}
-	
-	for (int a = 0; a < 22; a = a + 1)
-	{
-		if (WEAPON::_CAN_WEAPON_HAVE_COMPONENT(playerWeapon, magazineHashes[a]))
-		{
-			if (!WEAPON::HAS_PED_GOT_WEAPON_COMPONENT(playerPed, playerWeapon, magazineHashes[a]))
-			{
-				WEAPON::GIVE_WEAPON_COMPONENT_TO_PED(playerPed, playerWeapon, magazineHashes[a]);
-			}
-		}
-	}
-
-	for (int a = 0; a < 2; a = a + 1)
-	{
-		if (WEAPON::_CAN_WEAPON_HAVE_COMPONENT(playerWeapon, flashlightHashes[a]))
-		{
-			if (!WEAPON::HAS_PED_GOT_WEAPON_COMPONENT(playerPed, playerWeapon, flashlightHashes[a]))
-			{
-				WEAPON::GIVE_WEAPON_COMPONENT_TO_PED(playerPed, playerWeapon, flashlightHashes[a]);
-			}
-		}
-	}
-
-	for (int a = 0; a < 7; a = a + 1)
-	{
-		if (WEAPON::_CAN_WEAPON_HAVE_COMPONENT(playerWeapon, scopeHashes[a]))
-		{
-			if (!WEAPON::HAS_PED_GOT_WEAPON_COMPONENT(playerPed, playerWeapon, scopeHashes[a]))
-			{
-				WEAPON::GIVE_WEAPON_COMPONENT_TO_PED(playerPed, playerWeapon, scopeHashes[a]);
-			}
-		}
-	}
-
-	if (WEAPON::_CAN_WEAPON_HAVE_COMPONENT(playerWeapon, gripHash)) WEAPON::GIVE_WEAPON_COMPONENT_TO_PED(playerPed, playerWeapon, gripHash);
-	
 	/*
 	BOOL HAS_PED_GOT_WEAPON_COMPONENT(Ped ped, Hash weaponHash, Hash componentHash)
 	BOOL IS_PED_WEAPON_COMPONENT_ACTIVE(Ped ped, Hash weaponHash, Hash componentHash)
@@ -292,41 +340,498 @@ void weaponModder()
 	Special finish - 0x161E9241: Marksman Rifle,
 	??? - 0x9BC64089: Sniper Rifle,
 	*/
-}
 
-void update()
+void toggleSilencer()
 {
-	update_status_text();
-	if (IsKeyJustUp(0x12)) carModder();
-	if (CONTROLS::IS_CONTROL_PRESSED(2, 75)) gtaivCarExit();
-	if (IsKeyDown(ragdollKeyCode)) ragDoller();
-	if (toggleAlwaysRadio) radioChecker();
-	if (niceFlyToggle && CONTROLS::IS_CONTROL_PRESSED(0, 21)) niceFly();
-	
-	if (IsKeyJustUp(0x4F)) weaponModder();
+	Ped playerPed = PLAYER::PLAYER_PED_ID();
+	Hash playerWeapon = WEAPON::GET_SELECTED_PED_WEAPON(playerPed);
 
-	if (IsKeyJustUp(toggleKeyCode)){
-		niceFlyToggle = !niceFlyToggle;
-		if (niceFlyToggle){
-			set_status_text("Nice Fly ON");
-//			printf("Nice Fly ON");
-		}
-		else {
-			set_status_text("Nice Fly OFF");
-//			printf("Nice Fly OFF");
+	for (int a = 0; a < 5; a = a + 1)
+	{
+		if (WEAPON::_CAN_WEAPON_HAVE_COMPONENT(playerWeapon, silencerHashes[a]))
+		{
+			if (WEAPON::HAS_PED_GOT_WEAPON_COMPONENT(playerPed, playerWeapon, silencerHashes[a]))
+			{
+				WEAPON::REMOVE_WEAPON_COMPONENT_FROM_PED(playerPed, playerWeapon, silencerHashes[a]);
+				set_status_text("Silencer Removed");
+			}
+			else
+			{
+				WEAPON::GIVE_WEAPON_COMPONENT_TO_PED(playerPed, playerWeapon, silencerHashes[a]);
+				set_status_text("Silencer Attached");
+			}
 		}
 	}
+}
 
+void toggleMagazine()
+{
+	Ped playerPed = PLAYER::PLAYER_PED_ID();
+	Hash playerWeapon = WEAPON::GET_SELECTED_PED_WEAPON(playerPed);
 
+	for (int a = 0; a < 22; a = a + 1)
+	{
+		if (WEAPON::_CAN_WEAPON_HAVE_COMPONENT(playerWeapon, magazineHashes[a]))
+		{
+			if (WEAPON::HAS_PED_GOT_WEAPON_COMPONENT(playerPed, playerWeapon, magazineHashes[a]))
+			{
+				WEAPON::REMOVE_WEAPON_COMPONENT_FROM_PED(playerPed, playerWeapon, magazineHashes[a]);
+				set_status_text("Extended Magazine Removed");
+			}
+			else
+			{
+				WEAPON::GIVE_WEAPON_COMPONENT_TO_PED(playerPed, playerWeapon, magazineHashes[a]);
+				set_status_text("Extended Magazine Attached");
+			}
+		}
+	}
+}
 
+void toggleGrip()
+{
+	Ped playerPed = PLAYER::PLAYER_PED_ID();
+	Hash playerWeapon = WEAPON::GET_SELECTED_PED_WEAPON(playerPed);
 
+	if (WEAPON::_CAN_WEAPON_HAVE_COMPONENT(playerWeapon, gripHash))
+	{
+		if (WEAPON::HAS_PED_GOT_WEAPON_COMPONENT(playerPed, playerWeapon, gripHash))
+		{
+			WEAPON::REMOVE_WEAPON_COMPONENT_FROM_PED(playerPed, playerWeapon, gripHash);
+			set_status_text("Grip Removed");
+		}
+		else
+		{
+			WEAPON::GIVE_WEAPON_COMPONENT_TO_PED(playerPed, playerWeapon, gripHash);
+			set_status_text("Grip Attached");
+		}
+	}
+}
+
+void toggleFlashlight()
+{
+	Ped playerPed = PLAYER::PLAYER_PED_ID();
+	Hash playerWeapon = WEAPON::GET_SELECTED_PED_WEAPON(playerPed);
+
+	for (int a = 0; a < 2; a = a + 1)
+	{
+		if (WEAPON::_CAN_WEAPON_HAVE_COMPONENT(playerWeapon, flashlightHashes[a]))
+		{
+			if (WEAPON::HAS_PED_GOT_WEAPON_COMPONENT(playerPed, playerWeapon, flashlightHashes[a]))
+			{
+				WEAPON::REMOVE_WEAPON_COMPONENT_FROM_PED(playerPed, playerWeapon, flashlightHashes[a]);
+				set_status_text("Flashlight Removed");
+			}
+			else
+			{
+				WEAPON::GIVE_WEAPON_COMPONENT_TO_PED(playerPed, playerWeapon, flashlightHashes[a]);
+				set_status_text("Flashlight Attached");
+			}
+		}
+	}
+}
+
+void toggleScope()
+{
+	Ped playerPed = PLAYER::PLAYER_PED_ID();
+	Hash playerWeapon = WEAPON::GET_SELECTED_PED_WEAPON(playerPed);
+
+	for (int a = 0; a < 7; a = a + 1)
+	{
+		if (WEAPON::_CAN_WEAPON_HAVE_COMPONENT(playerWeapon, scopeHashes[a]))
+		{
+			if (WEAPON::HAS_PED_GOT_WEAPON_COMPONENT(playerPed, playerWeapon, scopeHashes[a]))
+			{
+				WEAPON::REMOVE_WEAPON_COMPONENT_FROM_PED(playerPed, playerWeapon, scopeHashes[a]);
+				set_status_text("Scope Removed");
+			}
+			else
+			{
+				WEAPON::GIVE_WEAPON_COMPONENT_TO_PED(playerPed, playerWeapon, scopeHashes[a]);
+				set_status_text("Scope Attached");
+			}
+		}
+	}
+}
+
+void weaponSanityCheck()
+{
+	Ped playerPed = PLAYER::PLAYER_PED_ID();
+	Hash playerWeapon = WEAPON::GET_SELECTED_PED_WEAPON(playerPed);
+
+	bool silencerSanity = false;
+	bool magazineSanity = false;
+	bool flashlightSanity = false;
+	bool scopeSanity = false;
+
+	for (int a = 0; a < 5; a = a + 1)
+	{
+		if (WEAPON::_CAN_WEAPON_HAVE_COMPONENT(playerWeapon, silencerHashes[a]))
+		{
+			silencerSanity = true;
+			if (WEAPON::HAS_PED_GOT_WEAPON_COMPONENT(playerPed, playerWeapon, silencerHashes[a]))
+				featureWeaponSilencer = true;
+			else
+				silencerSanity = false;
+				featureWeaponSilencer = false;
+		}
+	}
+	featureWeaponSilencer = silencerSanity;
+
+	for (int a = 0; a < 22; a = a + 1)
+	{
+		if (WEAPON::_CAN_WEAPON_HAVE_COMPONENT(playerWeapon, magazineHashes[a]))
+		{
+			magazineSanity = true;
+			if (WEAPON::HAS_PED_GOT_WEAPON_COMPONENT(playerPed, playerWeapon, magazineHashes[a]))
+				featureWeaponMagazine = true;
+			else
+				magazineSanity = false;
+				featureWeaponMagazine = false;
+		}
+	}
+	featureWeaponMagazine = magazineSanity;
+
+	if (WEAPON::HAS_PED_GOT_WEAPON_COMPONENT(playerPed, playerWeapon, gripHash))
+		featureWeaponGrip = true;
+	else
+		featureWeaponGrip = false;
+
+	for (int a = 0; a < 2; a = a + 1)
+	{
+		if (WEAPON::_CAN_WEAPON_HAVE_COMPONENT(playerWeapon, flashlightHashes[a]))
+		{
+			flashlightSanity = true;
+			if (WEAPON::HAS_PED_GOT_WEAPON_COMPONENT(playerPed, playerWeapon, flashlightHashes[a]))
+				featureWeaponFlashlight = true;
+			else
+				flashlightSanity = false;
+			featureWeaponFlashlight = false;
+		}
+	}
+	featureWeaponFlashlight = flashlightSanity;
+
+	for (int a = 0; a < 7; a = a + 1)
+	{
+		if (WEAPON::_CAN_WEAPON_HAVE_COMPONENT(playerWeapon, scopeHashes[a]))
+		{
+			scopeSanity = true;
+			if (WEAPON::HAS_PED_GOT_WEAPON_COMPONENT(playerPed, playerWeapon, scopeHashes[a]))
+				featureWeaponScope = true;
+			else
+				scopeSanity = false;
+			featureWeaponScope = false;
+		}
+	}
+	featureWeaponScope = scopeSanity;
+
+}
+
+void update_features()
+{
+	update_status_text();
+
+	Player player = PLAYER::PLAYER_ID();
+	Ped playerPed = PLAYER::PLAYER_PED_ID();
+	BOOL bPlayerExists = ENTITY::DOES_ENTITY_EXIST(playerPed);
+
+	if (featureNiceFly && CONTROLS::IS_CONTROL_PRESSED(0, 21))
+		niceFly();
+
+	if (featureGTAIVCarExit && CONTROLS::IS_CONTROL_PRESSED(2, 75))
+		gtaivCarExit();
+
+	if (featureRagdoll && IsKeyDown(0x55)) // Keyboard 'U'
+		ragdoller();
+
+	if (featureAlwaysRadioUpdated)
+	{
+		if (bPlayerExists && !featureAlwaysRadio)
+			AUDIO::SET_MOBILE_RADIO_ENABLED_DURING_GAMEPLAY(false);
+		featureAlwaysRadioUpdated = false;
+	}
+	if (featureAlwaysRadio)
+	{
+		if (bPlayerExists)
+			AUDIO::SET_MOBILE_RADIO_ENABLED_DURING_GAMEPLAY(true);
+	}
+
+	if (featureCarUpgrade && IsKeyJustUp(0x12))
+		carModder();
+
+	Hash playerWeapon = WEAPON::GET_SELECTED_PED_WEAPON(playerPed);
+
+	if (featureSilencerToggle && IsKeyJustUp(0x4F)) //keyboard 'O' (O as in your mom saying "oh my god ken gimme dat cack")
+	{
+		for (int a = 0; a < 5; a = a + 1)
+		{
+			if (WEAPON::_CAN_WEAPON_HAVE_COMPONENT(playerWeapon, silencerHashes[a]))
+			{
+				if (WEAPON::HAS_PED_GOT_WEAPON_COMPONENT(playerPed, playerWeapon, silencerHashes[a]))
+				{
+					WEAPON::REMOVE_WEAPON_COMPONENT_FROM_PED(playerPed, playerWeapon, silencerHashes[a]);
+					set_status_text("Silencer Removed");
+				}
+				else
+				{
+					WEAPON::GIVE_WEAPON_COMPONENT_TO_PED(playerPed, playerWeapon, silencerHashes[a]);
+					set_status_text("Silencer Attached");
+				}
+			}
+		}
+	}
+}
+
+int activeLineIndexWeapons = 0;
+
+void process_weaponupgrade_menu()
+{
+	const float lineWidth = 250.0;
+	const int lineCount = 6;
+
+	std::string caption = "Weapon Upgrades";
+
+	static struct {
+		LPCSTR		text;
+		bool		*pState;
+		bool		*pUpdated;
+	} lines[lineCount] = {
+		{ "Silencer EZ Toggle (O)", &featureSilencerToggle, NULL },
+		{ "Silencer Attachment", &featureWeaponSilencer, NULL },
+		{ "Magazine Attachment", &featureWeaponMagazine, NULL },
+		{ "Grip Attachment", &featureWeaponGrip, NULL },
+		{ "Flashlight Attachment", &featureWeaponFlashlight, NULL },
+		{ "Scope Attachment", &featureWeaponScope, NULL }
+	};
+	DWORD waitTime = 150;
+	while (true)
+	{
+		weaponSanityCheck();
+		// timed menu draw, used for pause after active line switch
+		DWORD maxTickCount = GetTickCount() + waitTime;
+		do
+		{
+			// draw menu
+			draw_menu_line(caption, lineWidth, 15.0, 18.0, 0.0, 5.0, false, true);
+			for (int i = 0; i < lineCount; i++)
+				if (i != activeLineIndexWeapons)
+					draw_menu_line(line_as_str(lines[i].text, lines[i].pState),
+					lineWidth, 9.0, 60.0 + i * 36.0, 0.0, 9.0, false, false);
+			draw_menu_line(line_as_str(lines[activeLineIndexWeapons].text, lines[activeLineIndexWeapons].pState),
+				lineWidth + 1.0, 11.0, 56.0 + activeLineIndexWeapons * 36.0, 0.0, 7.0, true, false);
+
+			update_features();
+			WAIT(0);
+		} while (GetTickCount() < maxTickCount);
+		waitTime = 0;
+
+		// process buttons
+		bool bSelect, bBack, bUp, bDown;
+		get_button_state(&bSelect, &bBack, &bUp, &bDown, NULL, NULL);
+		if (bSelect)
+		{
+			menu_beep();
+			switch (activeLineIndexWeapons)
+			{
+			case 1:
+			{
+				if (!featureWeaponSilencer)
+					WritePrivateProfileString("Toggles", "SilencerToggle", " 1", "./Ragdolla.ini");
+				else
+					WritePrivateProfileString("Toggles", "SilencerToggle", " 0", "./Ragdolla.ini");
+				toggleSilencer();
+				featureWeaponSilencer = !featureWeaponSilencer;
+				break;
+			}
+			case 2:
+			{
+				toggleMagazine();
+				featureWeaponMagazine = !featureWeaponMagazine;
+				break;
+			}
+			case 3:
+			{
+				toggleGrip();
+				featureWeaponGrip = !featureWeaponGrip;
+				break;
+			}
+			case 4:
+			{
+				toggleFlashlight();
+				featureWeaponFlashlight = !featureWeaponFlashlight;
+				break;
+			}
+			case 5:
+			{
+				toggleScope();
+				featureWeaponScope = !featureWeaponScope;
+				break;
+			}
+			default:
+				if (lines[activeLineIndexWeapons].pState)
+					*lines[activeLineIndexWeapons].pState = !(*lines[activeLineIndexWeapons].pState);
+				if (lines[activeLineIndexWeapons].pUpdated)
+					*lines[activeLineIndexWeapons].pUpdated = true;
+			}
+			waitTime = 200;
+		}
+		else
+			if (bBack || trainer_switch_pressed())
+			{
+				menu_beep();
+				break;
+			}
+			else
+				if (bUp)
+				{
+					menu_beep();
+					if (activeLineIndexWeapons == 0)
+						activeLineIndexWeapons = lineCount;
+					activeLineIndexWeapons--;
+					waitTime = 150;
+				}
+				else
+					if (bDown)
+					{
+						menu_beep();
+						activeLineIndexWeapons++;
+						if (activeLineIndexWeapons == lineCount)
+							activeLineIndexWeapons = 0;
+						waitTime = 150;
+					}
+	}
+}
+
+int activeLineIndexMain = 0;
+
+void process_main_menu()
+{
+	const float lineWidth = 250.0;
+	const int lineCount = 6;
+
+	std::string caption = "Maarek's Awesome Shit";
+
+	static struct {
+		LPCSTR		text;
+		bool		*pState;
+		bool		*pUpdated;
+	} lines[lineCount] = {
+		{ "Nice Fly", &featureNiceFly, NULL },
+		{ "GTAIV Car Exit", &featureGTAIVCarExit, NULL },
+		{ "Ragdoll (U)", &featureRagdoll, NULL },
+		{ "Always Radio", &featureAlwaysRadio, &featureAlwaysRadioUpdated },
+		{ "Car Upgrade (ALT)", &featureCarUpgrade, NULL },
+		{ "Weapon Upgrades", NULL, NULL }
+	};
+
+	DWORD waitTime = 150;
+	while (true)
+	{
+		// timed menu draw, used for pause after active line switch
+		DWORD maxTickCount = GetTickCount() + waitTime;
+		do
+		{
+			// draw menu
+			draw_menu_line(caption, lineWidth, 15.0, 18.0, 0.0, 5.0, false, true);
+			for (int i = 0; i < lineCount; i++)
+				if (i != activeLineIndexMain)
+					draw_menu_line(line_as_str(lines[i].text, lines[i].pState),
+					lineWidth, 9.0, 60.0 + i * 36.0, 0.0, 9.0, false, false);
+			draw_menu_line(line_as_str(lines[activeLineIndexMain].text, lines[activeLineIndexMain].pState),
+				lineWidth + 1.0, 11.0, 56.0 + activeLineIndexMain * 36.0, 0.0, 7.0, true, false);
+
+			update_features();
+			WAIT(0);
+		} while (GetTickCount() < maxTickCount);
+		waitTime = 0;
+
+		// process buttons
+		bool bSelect, bBack, bUp, bDown;
+		get_button_state(&bSelect, &bBack, &bUp, &bDown, NULL, NULL);
+		if (bSelect)
+		{
+			menu_beep();
+			switch (activeLineIndexMain)
+			{
+			case 0:
+				if (!featureNiceFly)
+					WritePrivateProfileString("Toggles", "NiceFly", " 1", "./Ragdolla.ini");
+				else
+					WritePrivateProfileString("Toggles", "NiceFly", " 0", "./Ragdolla.ini");
+				goto GHETTOJUMP;
+			case 1:
+				if (!featureGTAIVCarExit)
+					WritePrivateProfileString("Toggles", "GTAIVCarExit", " 1", "./Ragdolla.ini");
+				else
+					WritePrivateProfileString("Toggles", "GTAIVCarExit", " 0", "./Ragdolla.ini");
+				goto GHETTOJUMP;
+			case 2:
+				if (!featureRagdoll)
+					WritePrivateProfileString("Toggles", "Ragdoll", " 1", "./Ragdolla.ini");
+				else
+					WritePrivateProfileString("Toggles", "Ragdoll", " 0", "./Ragdolla.ini");
+				goto GHETTOJUMP;
+			case 3:
+				if (!featureAlwaysRadio)
+					WritePrivateProfileString("Toggles", "AlwaysRadio", " 1", "./Ragdolla.ini");
+				else
+					WritePrivateProfileString("Toggles", "AlwaysRadio", " 0", "./Ragdolla.ini");
+				goto GHETTOJUMP;
+			case 4:
+				if (!featureCarUpgrade)
+					WritePrivateProfileString("Toggles", "CarUpgrade", " 1", "./Ragdolla.ini");
+				else
+					WritePrivateProfileString("Toggles", "CarUpgrade", " 0", "./Ragdolla.ini");
+				goto GHETTOJUMP;
+			case 5:
+				weaponSanityCheck();
+				process_weaponupgrade_menu();
+				break;
+GHETTOJUMP: //this is so bad
+			default:
+				if (lines[activeLineIndexMain].pState)
+					*lines[activeLineIndexMain].pState = !(*lines[activeLineIndexMain].pState);
+				if (lines[activeLineIndexMain].pUpdated)
+					*lines[activeLineIndexMain].pUpdated = true;
+			}
+			waitTime = 200;
+		}
+		else
+		if (bBack || trainer_switch_pressed())
+		{
+			menu_beep();
+			break;
+		}
+		else
+		if (bUp)
+		{
+			menu_beep();
+			if (activeLineIndexMain == 0)
+				activeLineIndexMain = lineCount;
+			activeLineIndexMain--;
+			waitTime = 150;
+		}
+		else
+		if (bDown)
+		{
+			menu_beep();
+			activeLineIndexMain++;
+			if (activeLineIndexMain == lineCount)
+				activeLineIndexMain = 0;
+			waitTime = 150;
+		}
+	}
 }
 
 void main()
 {
 	while (true)
 	{
-		update();
+		if (trainer_switch_pressed())
+		{
+			menu_beep();
+			process_main_menu();
+		}
+		update_features();
 		WAIT(0);
 	}
 }
