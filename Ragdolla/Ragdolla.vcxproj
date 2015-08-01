@@ -11,16 +11,22 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="drawMenu.cpp" />
     <ClCompile Include="keyboard.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="script.cpp" />
+    <ClCompile Include="trainerFunctions.cpp" />
+    <ClCompile Include="weaponFunctions.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\inc\enums.h" />
     <ClInclude Include="..\..\inc\natives.h" />
     <ClInclude Include="..\..\inc\types.h" />
+    <ClInclude Include="drawMenu.h" />
     <ClInclude Include="keyboard.h" />
     <ClInclude Include="script.h" />
+    <ClInclude Include="trainerFunctions.h" />
+    <ClInclude Include="weaponFunctions.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Ragdolla.ini" />
